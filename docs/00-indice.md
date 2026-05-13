@@ -26,6 +26,13 @@
 | 15 | [Vistas Admin](./15-vistas-admin.md) | Menú, mesas, usuarios, reportes PDF |
 | 16 | [Layouts — Detalle](./16-layouts-detalle.md) | Header, Sidebar y Footer — CSS, JS y lógica completa |
 | 17 | [Controladores](./17-controladores.md) | AuthController y UsuarioController — flujos y seguridad |
+| 18 | [ProductoController](./18-ProductoController.md) | CRUD productos, upload de imagen, inicialización de stock |
+| 19 | [MesaController](./19-MesaController.md) | CRUD mesas, cambio de estado AJAX |
+| 20 | [ReservaController](./20-ReservaController.md) | Crear/cancelar reservas, sincronización con mesas |
+| 21 | [PedidoController](./21-PedidoController.md) | Pedidos cliente y mesero, cambio de estado, historial |
+| 22 | [InventarioController](./22-InventarioController.md) | Suministros, stock mínimo, historial de movimientos |
+| 23 | [ReporteController](./23-ReporteController.md) | Rangos de fechas, KPIs, ventas, pedidos, reservas, PDF |
+| 24 | [UsuarioAdminController](./24-UsuarioAdminController.md) | CRUD completo de usuarios desde el panel admin |
 
 ---
 
