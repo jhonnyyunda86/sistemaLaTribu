@@ -7,27 +7,81 @@ if (!isset($_SESSION['usuario'])) {
 
 require_once __DIR__.'/../../config/database.php';
 require_once __DIR__.'/../../models/Producto.php';
+require_once __DIR__.'/../../models/Inventario.php';
 
-$db = (new Database())->conectar();
+$db            = (new Database())->conectar();
 $productoModel = new Producto($db);
+$invModel      = new Inventario($db);
 
 $mensaje = '';
 $error   = '';
 
 /* =========================
+   HELPER: SUBIR IMAGEN
+========================= */
+function subirImagenProducto(array $file): string|false
+{
+    $permitidos = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+    $maxBytes   = 2 * 1024 * 1024; // 2 MB
+
+    if ($file['error'] !== UPLOAD_ERR_OK)          return false;
+    if (!in_array($file['type'], $permitidos))      return false;
+    if ($file['size'] > $maxBytes)                  return false;
+
+    $ext      = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
+    $nombre   = 'prod_' . uniqid() . '.' . $ext;
+    $destino  = __DIR__ . '/../../img/productos/' . $nombre;
+
+    return move_uploaded_file($file['tmp_name'], $destino) ? $nombre : false;
+}
+
+/* =========================
    CREAR PRODUCTO
 ========================= */
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['crear_producto'])) {
-    $nombre      = trim($_POST['nombre']      ?? '');
-    $precio      = trim($_POST['precio']      ?? '');
-    $descripcion = trim($_POST['descripcion'] ?? '');
+    $nombre       = trim($_POST['nombre']         ?? '');
+    $precio       = trim($_POST['precio']         ?? '');
+    $descripcion  = trim($_POST['descripcion']    ?? '');
+    $stockInicial = (int)($_POST['stock_inicial'] ?? 0);
+    $stockMinimo  = (int)($_POST['stock_minimo']  ?? 5);
+    $imagen       = '';
 
-    if ($nombre === '' || $precio === '') {
-        $error = "El nombre y el precio son obligatorios.";
-    } elseif ($productoModel->crear($nombre, $precio, $descripcion)) {
-        $mensaje = "Producto agregado correctamente.";
-    } else {
-        $error = "Error al agregar el producto.";
+    // Procesar imagen si se subió
+    if (!empty($_FILES['imagen']['name'])) {
+        $resultado = subirImagenProducto($_FILES['imagen']);
+        if ($resultado === false) {
+            $error = "Imagen inválida. Usa JPG, PNG o WEBP de máximo 2 MB.";
+        } else {
+            $imagen = $resultado;
+        }
+    }
+
+    if (!$error) {
+        if ($nombre === '' || $precio === '') {
+            $error = "El nombre y el precio son obligatorios.";
+        } elseif ($productoModel->crear($nombre, $precio, $descripcion, $imagen)) {
+            $nuevoId = (int)$db->lastInsertId();
+
+            $sqlInv = "INSERT INTO inventario (id_producto, cantidad_actual, cantidad_minima, fecha_actualizacion)
+                       VALUES (:id, :stock, :minimo, CURDATE())
+                       ON DUPLICATE KEY UPDATE
+                           cantidad_actual     = :stock2,
+                           cantidad_minima     = :minimo2,
+                           fecha_actualizacion = CURDATE()";
+            $stmtInv = $db->prepare($sqlInv);
+            $stmtInv->execute([
+                ':id'     => $nuevoId, ':stock'  => $stockInicial,
+                ':minimo' => $stockMinimo, ':stock2' => $stockInicial, ':minimo2' => $stockMinimo,
+            ]);
+
+            if ($stockInicial > 0) {
+                $invModel->registrarMovimiento($nuevoId, 'entrada', $stockInicial, 'Stock inicial al crear producto');
+            }
+
+            $mensaje = "Producto agregado correctamente.";
+        } else {
+            $error = "Error al agregar el producto.";
+        }
     }
 }
 
@@ -35,17 +89,41 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['crear_producto'])) {
    ACTUALIZAR PRODUCTO
 ========================= */
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['editar_producto'])) {
-    $id          = (int)($_POST['id_producto']      ?? 0);
-    $nombre      = trim($_POST['nombre']            ?? '');
-    $precio      = trim($_POST['precio']            ?? '');
-    $descripcion = trim($_POST['descripcion']       ?? '');
+    $id          = (int)($_POST['id_producto']  ?? 0);
+    $nombre      = trim($_POST['nombre']        ?? '');
+    $precio      = trim($_POST['precio']        ?? '');
+    $descripcion = trim($_POST['descripcion']   ?? '');
+    $imagenNueva = null;
 
     if ($id <= 0 || $nombre === '' || $precio === '') {
         $error = "Datos inválidos para actualizar.";
-    } elseif ($productoModel->actualizar($id, $nombre, $precio, $descripcion)) {
-        $mensaje = "Producto actualizado correctamente.";
     } else {
-        $error = "Error al actualizar el producto.";
+        // Procesar imagen si se subió una nueva
+        if (!empty($_FILES['imagen']['name']) && $_FILES['imagen']['error'] === UPLOAD_ERR_OK) {
+            $resultado = subirImagenProducto($_FILES['imagen']);
+            if ($resultado === false) {
+                $error = "Imagen inválida. Usa JPG, PNG o WEBP de máximo 2 MB.";
+            } else {
+                // Borrar imagen anterior
+                $prodActual = $productoModel->obtenerPorId($id);
+                if (!empty($prodActual['imagen'])) {
+                    $rutaAnterior = __DIR__ . '/../../img/productos/' . $prodActual['imagen'];
+                    if (file_exists($rutaAnterior)) @unlink($rutaAnterior);
+                }
+                $imagenNueva = $resultado;
+            }
+        }
+
+        if (!$error) {
+            // Actualizar datos básicos
+            $ok = $productoModel->actualizar($id, $nombre, $precio, $descripcion);
+            // Actualizar imagen solo si se subió una nueva
+            if ($ok && $imagenNueva !== null) {
+                $productoModel->actualizarImagen($id, $imagenNueva);
+            }
+            $mensaje = $ok ? "Producto actualizado correctamente." : "Error al actualizar el producto.";
+            if (!$ok) $error = "Error al actualizar el producto.";
+        }
     }
 }
 
@@ -100,9 +178,11 @@ require_once __DIR__.'/../layouts/sidebar.php';
         <table class="w-full text-left">
             <thead class="bg-orange-100">
                 <tr>
-                    <th class="p-4 rounded-tl-xl">Producto</th>
+                    <th class="p-4 rounded-tl-xl">Imagen</th>
+                    <th class="p-4">Producto</th>
                     <th class="p-4">Precio</th>
                     <th class="p-4">Descripción</th>
+                    <th class="p-4 text-center">Stock</th>
                     <th class="p-4 rounded-tr-xl text-center">Acciones</th>
                 </tr>
             </thead>
@@ -110,36 +190,75 @@ require_once __DIR__.'/../layouts/sidebar.php';
             <tbody>
             <?php if (empty($productos)): ?>
                 <tr>
-                    <td colspan="4" class="p-6 text-center text-stone-400">
+                    <td colspan="5" class="p-6 text-center text-stone-400">
                         No hay productos registrados.
                     </td>
                 </tr>
             <?php else: ?>
-                <?php foreach ($productos as $p): ?>
+                <?php foreach ($productos as $p):
+                    $inv = $invModel->obtenerPorProducto((int)$p['id_producto']);
+                    $stockActual  = $inv ? (int)$inv['cantidad_actual']  : null;
+                    $stockMinimo  = $inv ? (int)$inv['cantidad_minima']  : null;
+                    $estadoStock  = 'sin-registro';
+                    $badgeStock   = '<span class="text-xs font-bold px-2 py-0.5 rounded-full bg-stone-100 text-stone-500">Sin registro</span>';
+                    if ($inv !== false) {
+                        if ($stockActual === 0) {
+                            $estadoStock = 'agotado';
+                            $badgeStock  = '<span class="text-xs font-bold px-2 py-0.5 rounded-full bg-red-100 text-red-700"><i class="fa-solid fa-circle-xmark mr-1"></i>Agotado (0)</span>';
+                        } elseif ($stockActual <= $stockMinimo) {
+                            $estadoStock = 'bajo';
+                            $badgeStock  = "<span class='text-xs font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700'><i class='fa-solid fa-triangle-exclamation mr-1'></i>Bajo ({$stockActual})</span>";
+                        } else {
+                            $estadoStock = 'ok';
+                            $badgeStock  = "<span class='text-xs font-bold px-2 py-0.5 rounded-full bg-green-100 text-green-700'><i class='fa-solid fa-circle-check mr-1'></i>{$stockActual} uds.</span>";
+                        }
+                    }
+                ?>
                     <tr class="border-t hover:bg-orange-50 transition">
+                        <td class="p-3">
+                            <?php
+                                $imgSrc = '';
+                                if (!empty($p['imagen'])) {
+                                    $ruta = __DIR__ . '/../../img/productos/' . $p['imagen'];
+                                    if (file_exists($ruta)) {
+                                        $imgSrc = '../../img/productos/' . htmlspecialchars($p['imagen']);
+                                    }
+                                }
+                            ?>
+                            <?php if ($imgSrc): ?>
+                                <img src="<?= $imgSrc ?>"
+                                     alt="<?= htmlspecialchars($p['nombre']) ?>"
+                                     class="w-14 h-14 rounded-xl object-cover border border-orange-100 shadow-sm">
+                            <?php else: ?>
+                                <div class="w-14 h-14 rounded-xl bg-orange-50 border border-orange-100 flex items-center justify-center text-orange-300 text-xl">
+                                    <i class="fa-solid fa-image"></i>
+                                </div>
+                            <?php endif; ?>
+                        </td>
                         <td class="p-4 font-bold">
                             <?= htmlspecialchars($p['nombre'] ?? '') ?>
                         </td>
                         <td class="p-4">
                             $<?= number_format((float)($p['precio'] ?? 0), 2) ?>
                         </td>
-                        <td class="p-4 text-stone-500">
+                        <td class="p-4 text-stone-500 text-sm max-w-xs truncate">
                             <?= htmlspecialchars($p['descripcion'] ?? '') ?>
                         </td>
                         <td class="p-4 text-center">
-                            <!-- Botón Editar -->
+                            <?= $badgeStock ?>
+                        </td>
+                        <td class="p-4 text-center">
                             <button
                                 onclick="abrirModalEditar(
                                     <?= (int)$p['id_producto'] ?>,
                                     <?= htmlspecialchars(json_encode($p['nombre'] ?? ''), ENT_QUOTES) ?>,
                                     <?= htmlspecialchars(json_encode($p['precio'] ?? ''), ENT_QUOTES) ?>,
-                                    <?= htmlspecialchars(json_encode($p['descripcion'] ?? ''), ENT_QUOTES) ?>
+                                    <?= htmlspecialchars(json_encode($p['descripcion'] ?? ''), ENT_QUOTES) ?>,
+                                    <?= htmlspecialchars(json_encode($p['imagen'] ?? ''), ENT_QUOTES) ?>
                                 )"
                                 class="inline-flex items-center gap-1 bg-blue-100 hover:bg-blue-200 text-blue-700 font-bold px-3 py-1.5 rounded-lg transition text-sm mr-1">
                                 <i class="fa-solid fa-pen-to-square"></i> Editar
                             </button>
-
-                            <!-- Botón Eliminar -->
                             <button
                                 onclick="abrirModalEliminar(
                                     <?= (int)$p['id_producto'] ?>,
@@ -175,7 +294,7 @@ require_once __DIR__.'/../layouts/sidebar.php';
             <h2 class="text-xl font-black">Agregar Producto</h2>
         </div>
 
-        <form method="POST">
+        <form method="POST" enctype="multipart/form-data">
             <input type="hidden" name="crear_producto" value="1">
 
             <label class="block text-sm font-bold text-stone-600 mb-1">Nombre *</label>
@@ -187,8 +306,45 @@ require_once __DIR__.'/../layouts/sidebar.php';
                 class="w-full mb-4 p-2.5 border border-stone-200 rounded-xl focus:outline-none focus:border-orange-400">
 
             <label class="block text-sm font-bold text-stone-600 mb-1">Descripción</label>
-            <textarea name="descripcion" placeholder="Descripción del producto..." rows="3"
-                class="w-full mb-5 p-2.5 border border-stone-200 rounded-xl focus:outline-none focus:border-orange-400 resize-none"></textarea>
+            <textarea name="descripcion" placeholder="Descripción del producto..." rows="2"
+                class="w-full mb-4 p-2.5 border border-stone-200 rounded-xl focus:outline-none focus:border-orange-400 resize-none"></textarea>
+
+            <!-- IMAGEN -->
+            <label class="block text-sm font-bold text-stone-600 mb-1">
+                <i class="fa-solid fa-image text-orange-500 mr-1"></i> Imagen del producto
+            </label>
+            <div class="mb-2 border-2 border-dashed border-stone-200 rounded-xl p-3 text-center cursor-pointer hover:border-orange-400 transition"
+                 onclick="document.getElementById('file_crear').click()">
+                <div id="preview_crear_wrap">
+                    <i class="fa-solid fa-cloud-arrow-up text-2xl text-stone-300 mb-1 block"></i>
+                    <p class="text-xs text-stone-400">Haz clic para seleccionar imagen</p>
+                    <p class="text-xs text-stone-300">JPG, PNG, WEBP · Máx. 2 MB</p>
+                </div>
+                <img id="preview_crear_img" src="" alt="" class="hidden w-full h-32 object-cover rounded-lg mt-2">
+            </div>
+            <input type="file" name="imagen" id="file_crear" accept="image/jpeg,image/png,image/webp,image/gif"
+                class="hidden" onchange="previsualizarFile(this,'preview_crear_img','preview_crear_wrap')">
+
+            <div class="grid grid-cols-2 gap-3 mb-5">
+                <div>
+                    <label class="block text-sm font-bold text-stone-600 mb-1">
+                        <i class="fa-solid fa-boxes-stacked text-orange-500 mr-1"></i> Stock inicial
+                    </label>
+                    <input type="number" name="stock_inicial" min="0" value="0" placeholder="0"
+                        class="w-full p-2.5 border border-stone-200 rounded-xl focus:outline-none focus:border-orange-400">
+                </div>
+                <div>
+                    <label class="block text-sm font-bold text-stone-600 mb-1">
+                        <i class="fa-solid fa-triangle-exclamation text-amber-500 mr-1"></i> Stock mínimo
+                    </label>
+                    <input type="number" name="stock_minimo" min="0" value="5" placeholder="5"
+                        class="w-full p-2.5 border border-stone-200 rounded-xl focus:outline-none focus:border-orange-400">
+                </div>
+            </div>
+            <p class="text-xs text-stone-400 mb-4 -mt-2">
+                <i class="fa-solid fa-circle-info text-orange-400 mr-1"></i>
+                El stock mínimo genera alertas cuando el inventario baje de ese nivel.
+            </p>
 
             <div class="flex gap-3">
                 <button type="button" onclick="cerrarModalCrear()"
@@ -222,7 +378,7 @@ require_once __DIR__.'/../layouts/sidebar.php';
             <h2 class="text-xl font-black">Editar Producto</h2>
         </div>
 
-        <form method="POST">
+        <form method="POST" enctype="multipart/form-data">
             <input type="hidden" name="editar_producto" value="1">
             <input type="hidden" name="id_producto" id="edit_id">
 
@@ -235,8 +391,25 @@ require_once __DIR__.'/../layouts/sidebar.php';
                 class="w-full mb-4 p-2.5 border border-stone-200 rounded-xl focus:outline-none focus:border-blue-400">
 
             <label class="block text-sm font-bold text-stone-600 mb-1">Descripción</label>
-            <textarea name="descripcion" id="edit_descripcion" rows="3"
-                class="w-full mb-5 p-2.5 border border-stone-200 rounded-xl focus:outline-none focus:border-blue-400 resize-none"></textarea>
+            <textarea name="descripcion" id="edit_descripcion" rows="2"
+                class="w-full mb-4 p-2.5 border border-stone-200 rounded-xl focus:outline-none focus:border-blue-400 resize-none"></textarea>
+
+            <!-- IMAGEN -->
+            <label class="block text-sm font-bold text-stone-600 mb-1">
+                <i class="fa-solid fa-image text-blue-500 mr-1"></i> Imagen del producto
+            </label>
+            <div class="mb-1 border-2 border-dashed border-stone-200 rounded-xl p-3 text-center cursor-pointer hover:border-blue-400 transition"
+                 onclick="document.getElementById('file_editar').click()">
+                <div id="preview_editar_wrap">
+                    <i class="fa-solid fa-cloud-arrow-up text-2xl text-stone-300 mb-1 block"></i>
+                    <p class="text-xs text-stone-400">Haz clic para cambiar la imagen</p>
+                    <p class="text-xs text-stone-300">JPG, PNG, WEBP · Máx. 2 MB</p>
+                </div>
+                <img id="preview_editar_img" src="" alt="" class="hidden w-full h-32 object-cover rounded-lg mt-2">
+            </div>
+            <p id="edit_imagen_actual_txt" class="text-xs text-stone-400 mb-4"></p>
+            <input type="file" name="imagen" id="file_editar" accept="image/jpeg,image/png,image/webp,image/gif"
+                class="hidden" onchange="previsualizarFile(this,'preview_editar_img','preview_editar_wrap')">
 
             <div class="flex gap-3">
                 <button type="button" onclick="cerrarModalEditar()"
@@ -299,11 +472,31 @@ function cerrarModalCrear() {
 }
 
 /* ── Modal Editar ── */
-function abrirModalEditar(id, nombre, precio, descripcion) {
+function abrirModalEditar(id, nombre, precio, descripcion, imagen) {
     document.getElementById('edit_id').value          = id;
     document.getElementById('edit_nombre').value      = nombre;
     document.getElementById('edit_precio').value      = precio;
     document.getElementById('edit_descripcion').value = descripcion;
+
+    // Mostrar imagen actual si existe
+    var prevImg  = document.getElementById('preview_editar_img');
+    var prevWrap = document.getElementById('preview_editar_wrap');
+    var txtActual = document.getElementById('edit_imagen_actual_txt');
+
+    if (imagen) {
+        prevImg.src = '../../img/productos/' + imagen;
+        prevImg.classList.remove('hidden');
+        prevWrap.style.display = 'none';
+        txtActual.innerHTML = '<i class="fa-solid fa-circle-check text-green-500 mr-1"></i>Imagen actual: <strong>' + imagen + '</strong>. Selecciona un archivo para reemplazarla.';
+    } else {
+        prevImg.src = '';
+        prevImg.classList.add('hidden');
+        prevWrap.style.display = 'block';
+        txtActual.textContent = '';
+    }
+
+    // Limpiar el input file
+    document.getElementById('file_editar').value = '';
 
     document.getElementById('modalEditar').classList.remove('hidden');
     document.getElementById('modalEditar').classList.add('flex');
@@ -311,6 +504,22 @@ function abrirModalEditar(id, nombre, precio, descripcion) {
 function cerrarModalEditar() {
     document.getElementById('modalEditar').classList.add('hidden');
     document.getElementById('modalEditar').classList.remove('flex');
+}
+
+/* ── Previsualizar archivo seleccionado ── */
+function previsualizarFile(input, imgId, wrapId) {
+    var file = input.files[0];
+    if (!file) return;
+
+    var reader = new FileReader();
+    reader.onload = function(e) {
+        var img  = document.getElementById(imgId);
+        var wrap = document.getElementById(wrapId);
+        img.src  = e.target.result;
+        img.classList.remove('hidden');
+        if (wrap) wrap.style.display = 'none';
+    };
+    reader.readAsDataURL(file);
 }
 
 /* ── Modal Eliminar ── */

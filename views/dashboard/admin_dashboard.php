@@ -358,6 +358,10 @@ require_once __DIR__ . '/../layouts/sidebar.php';
                     <i class="fa-solid fa-chart-bar text-orange-600 group-hover:text-white text-2xl mb-3"></i>
                     <p class="font-black">Reportes</p>
                 </a>
+                <a class="group p-5 border border-orange-100 rounded-2xl bg-white hover:bg-orange-600 hover:text-white transition shadow-sm" href="admin_inventario.php">
+                    <i class="fa-solid fa-boxes-stacked text-orange-600 group-hover:text-white text-2xl mb-3"></i>
+                    <p class="font-black">Inventario</p>
+                </a>
             </div>
         </div>
 

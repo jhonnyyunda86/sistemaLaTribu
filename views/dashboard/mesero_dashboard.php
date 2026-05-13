@@ -39,14 +39,38 @@ $nombre = $_SESSION['usuario']['nombre'] ?? 'Mesero';
         <i class="fa-solid fa-arrow-right ml-auto text-orange-400 group-hover:translate-x-1 transition"></i>
     </a>
 
-    <a href="admin_pedidos.php"
+    <a href="mesero_pedidos.php"
        class="group bg-white rounded-2xl shadow p-6 border border-orange-100 hover:border-orange-400 hover:-translate-y-1 transition flex items-center gap-5">
         <div class="w-14 h-14 rounded-2xl bg-gradient-to-br from-orange-600 to-amber-500 text-white flex items-center justify-center text-2xl shadow-lg">
             <i class="fa-solid fa-receipt"></i>
         </div>
         <div>
-            <p class="text-lg font-black text-stone-900">Pedidos</p>
-            <p class="text-sm text-stone-400">Revisa y gestiona los pedidos activos</p>
+            <p class="text-lg font-black text-stone-900">Gestionar Pedidos</p>
+            <p class="text-sm text-stone-400">Ver, crear y actualizar pedidos</p>
+        </div>
+        <i class="fa-solid fa-arrow-right ml-auto text-orange-400 group-hover:translate-x-1 transition"></i>
+    </a>
+
+    <a href="mesero_reservas.php"
+       class="group bg-white rounded-2xl shadow p-6 border border-orange-100 hover:border-orange-400 hover:-translate-y-1 transition flex items-center gap-5">
+        <div class="w-14 h-14 rounded-2xl bg-gradient-to-br from-green-600 to-emerald-500 text-white flex items-center justify-center text-2xl shadow-lg">
+            <i class="fa-solid fa-calendar-check"></i>
+        </div>
+        <div>
+            <p class="text-lg font-black text-stone-900">Reservas</p>
+            <p class="text-sm text-stone-400">Consulta y gestiona las reservas del día</p>
+        </div>
+        <i class="fa-solid fa-arrow-right ml-auto text-orange-400 group-hover:translate-x-1 transition"></i>
+    </a>
+
+    <a href="mesero_stock.php"
+       class="group bg-white rounded-2xl shadow p-6 border border-orange-100 hover:border-orange-400 hover:-translate-y-1 transition flex items-center gap-5">
+        <div class="w-14 h-14 rounded-2xl bg-gradient-to-br from-purple-600 to-violet-500 text-white flex items-center justify-center text-2xl shadow-lg">
+            <i class="fa-solid fa-boxes-stacked"></i>
+        </div>
+        <div>
+            <p class="text-lg font-black text-stone-900">Stock de Productos</p>
+            <p class="text-sm text-stone-400">Consulta la disponibilidad del inventario</p>
         </div>
         <i class="fa-solid fa-arrow-right ml-auto text-orange-400 group-hover:translate-x-1 transition"></i>
     </a>

@@ -1,6 +1,12 @@
 <?php
 if (session_status() === PHP_SESSION_NONE) session_start();
 $titulo = $titulo ?? 'Sistema Restaurante';
+
+// Headers anti-caché: impiden que el navegador guarde páginas protegidas
+header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+header('Cache-Control: post-check=0, pre-check=0', false);
+header('Pragma: no-cache');
+header('Expires: Sat, 01 Jan 2000 00:00:00 GMT');
 ?>
 <!DOCTYPE html>
 <html lang="es">
@@ -14,51 +20,57 @@ $titulo = $titulo ?? 'Sistema Restaurante';
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
 
     <style>
-        /* ── Fondo global ── */
-        html, body {
+        /* ══════════════════════════════════════════
+           RESET BASE
+        ══════════════════════════════════════════ */
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        html {
             height: 100%;
-            overflow: hidden; /* el scroll lo maneja solo el área de contenido */
         }
+
         body {
+            min-height: 100%;
             background:
                 linear-gradient(rgba(28,25,23,.90), rgba(28,25,23,.94)),
-                url('https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?auto=format&fit=crop&w=2000&q=80');
-            background-size: cover;
-            background-position: center;
-            background-attachment: fixed;
+                url('https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?auto=format&fit=crop&w=2000&q=80')
+                center center / cover fixed;
             color: #1e293b;
+            font-family: ui-sans-serif, system-ui, sans-serif;
         }
 
-        /* ── Contenedor raíz: ocupa toda la pantalla ── */
+        /* ══════════════════════════════════════════
+           LAYOUT RAÍZ
+           Sidebar fijo a la izquierda.
+           Columna derecha ocupa el resto y usa
+           flex-column para empujar el footer abajo.
+        ══════════════════════════════════════════ */
         #app {
             display: flex;
-            height: 100vh;
-            overflow: hidden;
+            min-height: 100vh;   /* ocupa al menos toda la pantalla */
         }
 
-        /* ── Sidebar fijo a la izquierda ── */
+        /* ── Sidebar ── */
         #sidebar {
-            width: 288px;          /* w-72 */
+            width: 288px;
             flex-shrink: 0;
-            height: 100vh;
-            overflow-y: auto;
-            position: sticky;
+            position: sticky;    /* se queda fijo mientras scrolleas */
             top: 0;
-            left: 0;
+            height: 100vh;       /* siempre visible */
+            overflow-y: auto;
             z-index: 40;
         }
 
-        /* ── Columna derecha: header + contenido + footer ── */
+        /* ── Columna derecha ── */
         #col-right {
             flex: 1;
+            min-width: 0;
             display: flex;
             flex-direction: column;
-            height: 100vh;
-            overflow: hidden;
-            min-width: 0;
+            min-height: 100vh;   /* al menos toda la pantalla */
         }
 
-        /* ── Header fijo arriba ── */
+        /* ── Header ── */
         #top-header {
             flex-shrink: 0;
             position: sticky;
@@ -66,32 +78,28 @@ $titulo = $titulo ?? 'Sistema Restaurante';
             z-index: 30;
         }
 
-        /* ── Área de contenido: único elemento con scroll ── */
+        /* ── Contenido: crece para empujar el footer ── */
         #content-area {
-            flex: 1;
-            overflow-y: auto;
+            flex: 1;             /* ocupa todo el espacio disponible */
             padding: 2rem;
         }
 
-        /* ── Footer fijo abajo ── */
+        /* ── Footer: siempre al fondo ── */
         #bottom-footer {
             flex-shrink: 0;
+            margin-top: auto;    /* doble seguro: empuja al fondo */
         }
 
-        /* ── Scrollbar personalizada ── */
-        #sidebar::-webkit-scrollbar,
-        #content-area::-webkit-scrollbar { width: 6px; }
-        #sidebar::-webkit-scrollbar-track,
-        #content-area::-webkit-scrollbar-track { background: #1c1917; }
-        #sidebar::-webkit-scrollbar-thumb,
-        #content-area::-webkit-scrollbar-thumb {
-            background: linear-gradient(#ea580c, #f59e0b);
-            border-radius: 999px;
-        }
+        /* ══════════════════════════════════════════
+           SCROLLBAR PERSONALIZADA
+        ══════════════════════════════════════════ */
+        ::-webkit-scrollbar          { width: 6px; }
+        ::-webkit-scrollbar-track    { background: #1c1917; }
+        ::-webkit-scrollbar-thumb    { background: linear-gradient(#ea580c, #f59e0b); border-radius: 999px; }
 
-        ::selection { background: #ea580c; color: white; }
+        ::selection { background: #ea580c; color: #fff; }
     </style>
 </head>
 
-<body class="antialiased">
+<body>
 <div id="app">

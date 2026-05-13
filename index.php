@@ -1,4 +1,20 @@
 <!DOCTYPE html>
+<?php
+// Si ya hay sesión activa, redirigir al dashboard correspondiente
+session_start();
+if (isset($_SESSION['usuario'])) {
+    $destinos = [
+        'admin'   => 'views/dashboard/admin_dashboard.php',
+        'mesero'  => 'views/dashboard/mesero_dashboard.php',
+        'cliente' => 'views/dashboard/cliente_dashboard.php',
+    ];
+    $rol = $_SESSION['usuario']['role'] ?? '';
+    if (isset($destinos[$rol])) {
+        header('Location: ' . $destinos[$rol]);
+        exit;
+    }
+}
+?>
 <html lang="es" class="scroll-smooth">
 
 <head>
@@ -378,62 +394,328 @@
         </div>
     </footer>
 
-    <!-- CHATBOT VISUAL -->
-    <div id="chatbot-container" class="fixed bottom-6 right-6 z-50">
-        <div id="chatbot-window"
-             class="hidden bg-white w-80 rounded-3xl shadow-2xl border border-orange-100 overflow-hidden mb-4">
-            <div class="bg-gradient-to-r from-orange-600 to-amber-500 p-4 text-white flex justify-between items-center">
-                <div class="flex items-center gap-3">
-                    <div class="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center">
-                        <i class="fas fa-robot"></i>
-                    </div>
-                    <div>
-                        <h4 class="font-black">Asistente La Tribu</h4>
-                        <p class="text-xs">En línea</p>
-                    </div>
+    <!-- ══════════════════════════════════════════════════════
+         CHATBOT TRIBU — Asistente Virtual Inteligente
+    ══════════════════════════════════════════════════════ -->
+
+    <!-- Burbuja flotante -->
+    <div id="chat-fab" onclick="toggleChat()"
+         style="position:fixed;bottom:1.75rem;right:1.75rem;z-index:9999;
+                width:62px;height:62px;border-radius:50%;
+                background:linear-gradient(135deg,#ea580c,#f59e0b);
+                color:#fff;border:none;cursor:pointer;
+                box-shadow:0 8px 28px rgba(234,88,12,.5);
+                display:flex;align-items:center;justify-content:center;
+                font-size:1.5rem;transition:transform .2s;"
+         onmouseover="this.style.transform='scale(1.1)'"
+         onmouseout="this.style.transform='scale(1)'">
+        <i class="fas fa-comment-dots" id="chat-fab-icon"></i>
+        <span id="chat-notif"
+              style="position:absolute;top:-4px;right:-4px;
+                     background:#dc2626;color:#fff;font-size:.6rem;font-weight:900;
+                     width:18px;height:18px;border-radius:50%;
+                     display:none;align-items:center;justify-content:center;
+                     border:2px solid #fff;">1</span>
+    </div>
+
+    <!-- Ventana del chat -->
+    <div id="chat-window"
+         style="display:none;position:fixed;bottom:6rem;right:1.75rem;z-index:9998;
+                width:370px;max-width:calc(100vw - 2rem);
+                background:#fff;border-radius:24px;
+                box-shadow:0 24px 64px rgba(0,0,0,.18);
+                border:1px solid rgba(234,88,12,.15);
+                overflow:hidden;
+                flex-direction:column;">
+
+        <!-- Header -->
+        <div style="background:linear-gradient(135deg,#ea580c,#f59e0b);padding:1rem 1.25rem;
+                    display:flex;align-items:center;justify-content:space-between;">
+            <div style="display:flex;align-items:center;gap:.75rem;">
+                <div style="width:42px;height:42px;border-radius:50%;
+                            background:rgba(255,255,255,.2);
+                            display:flex;align-items:center;justify-content:center;
+                            font-size:1.2rem;color:#fff;position:relative;">
+                    <i class="fas fa-robot"></i>
+                    <span style="position:absolute;bottom:1px;right:1px;
+                                 width:10px;height:10px;background:#22c55e;
+                                 border-radius:50%;border:2px solid #fff;"></span>
                 </div>
-                <button onclick="toggleChatbot()">
-                    <i class="fas fa-times"></i>
+                <div>
+                    <p style="font-weight:900;color:#fff;font-size:.95rem;">Tribu Assistant</p>
+                    <p style="font-size:.7rem;color:rgba(255,255,255,.8);">
+                        <span id="chat-typing-indicator" style="display:none;">escribiendo...</span>
+                        <span id="chat-online">En línea · siempre disponible</span>
+                    </p>
+                </div>
+            </div>
+            <div style="display:flex;gap:.5rem;">
+                <button onclick="limpiarChat()" title="Limpiar chat"
+                    style="background:rgba(255,255,255,.15);border:none;color:#fff;
+                           width:30px;height:30px;border-radius:50%;cursor:pointer;font-size:.8rem;"
+                    onmouseover="this.style.background='rgba(255,255,255,.3)'"
+                    onmouseout="this.style.background='rgba(255,255,255,.15)'">
+                    <i class="fas fa-trash-can"></i>
                 </button>
-            </div>
-
-            <div class="p-4 h-72 overflow-y-auto bg-orange-50">
-                <div class="bg-white p-3 rounded-2xl shadow-sm text-sm text-stone-700">
-                    ¡Hola! Soy el asistente de Restaurante La Tribu. Puedo orientarte sobre registro, ingreso y uso del sistema.
-                </div>
-            </div>
-
-            <div class="p-4 border-t flex gap-2">
-                <input type="text" placeholder="Escribe tu mensaje..."
-                       class="w-full border rounded-full px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500">
-                <button class="w-10 h-10 rounded-full bg-orange-600 text-white">
-                    <i class="fas fa-paper-plane"></i>
+                <button onclick="toggleChat()"
+                    style="background:rgba(255,255,255,.15);border:none;color:#fff;
+                           width:30px;height:30px;border-radius:50%;cursor:pointer;font-size:.9rem;"
+                    onmouseover="this.style.background='rgba(255,255,255,.3)'"
+                    onmouseout="this.style.background='rgba(255,255,255,.15)'">
+                    <i class="fas fa-minus"></i>
                 </button>
             </div>
         </div>
 
-        <button onclick="toggleChatbot()"
-                class="w-16 h-16 bg-orange-600 hover:bg-orange-700 text-white rounded-full shadow-2xl text-2xl">
-            <i class="fas fa-comment-dots"></i>
-        </button>
+        <!-- Mensajes -->
+        <div id="chat-messages"
+             style="flex:1;overflow-y:auto;padding:1rem;
+                    background:#fafaf9;min-height:320px;max-height:380px;
+                    display:flex;flex-direction:column;gap:.75rem;">
+        </div>
+
+        <!-- Respuestas rápidas -->
+        <div id="chat-quick"
+             style="padding:.6rem 1rem;display:flex;gap:.4rem;flex-wrap:wrap;
+                    border-top:1px solid #f5f0eb;background:#fff;">
+        </div>
+
+        <!-- Input -->
+        <div style="padding:.75rem 1rem;border-top:1px solid #f5f0eb;background:#fff;
+                    display:flex;gap:.5rem;align-items:center;">
+            <input id="chat-input" type="text" placeholder="Escribe tu mensaje..."
+                   onkeydown="if(event.key==='Enter') enviarMensaje()"
+                   style="flex:1;padding:.6rem 1rem;border:2px solid #e7e5e4;
+                          border-radius:999px;font-size:.85rem;outline:none;
+                          transition:border-color .2s;"
+                   onfocus="this.style.borderColor='#ea580c'"
+                   onblur="this.style.borderColor='#e7e5e4'">
+            <button onclick="enviarMensaje()"
+                    style="width:38px;height:38px;border-radius:50%;border:none;
+                           background:linear-gradient(135deg,#ea580c,#f59e0b);
+                           color:#fff;cursor:pointer;font-size:.9rem;flex-shrink:0;
+                           transition:transform .15s;"
+                    onmouseover="this.style.transform='scale(1.1)'"
+                    onmouseout="this.style.transform='scale(1)'">
+                <i class="fas fa-paper-plane"></i>
+            </button>
+        </div>
     </div>
 
+    <style>
+    @keyframes chatIn { from{opacity:0;transform:translateY(20px) scale(.95)} to{opacity:1;transform:translateY(0) scale(1)} }
+    @keyframes msgIn  { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
+    .msg-bot  { align-self:flex-start;max-width:82%; }
+    .msg-user { align-self:flex-end;max-width:82%; }
+    .bubble-bot  { background:#fff;border:1px solid #f5f0eb;color:#1c1917;border-radius:18px 18px 18px 4px;padding:.65rem .9rem;font-size:.85rem;line-height:1.5;box-shadow:0 2px 8px rgba(0,0,0,.06);animation:msgIn .25s ease; }
+    .bubble-user { background:linear-gradient(135deg,#ea580c,#f59e0b);color:#fff;border-radius:18px 18px 4px 18px;padding:.65rem .9rem;font-size:.85rem;line-height:1.5;animation:msgIn .25s ease; }
+    .quick-btn { padding:.35rem .85rem;border-radius:999px;border:1.5px solid #ea580c;color:#ea580c;background:#fff;font-size:.75rem;font-weight:700;cursor:pointer;transition:all .2s;white-space:nowrap; }
+    .quick-btn:hover { background:#ea580c;color:#fff; }
+    #chat-messages::-webkit-scrollbar { width:4px; }
+    #chat-messages::-webkit-scrollbar-thumb { background:#fdba74;border-radius:999px; }
+    </style>
+
     <script src="https://unpkg.com/aos@2.3.1/dist/aos.js"></script>
-
     <script>
-        AOS.init({
-            once: true,
-            duration: 800,
-            offset: 50
-        });
-
+        AOS.init({ once: true, duration: 800, offset: 50 });
         function toggleMenu() {
             document.getElementById('mobile-menu').classList.toggle('hidden');
         }
 
-        function toggleChatbot() {
-            document.getElementById('chatbot-window').classList.toggle('hidden');
+        /* ══════════════════════════════════════════════════════
+           CHATBOT TRIBU — Motor de conversación
+        ══════════════════════════════════════════════════════ */
+        var chatAbierto   = false;
+        var chatHistorial = [];
+
+        var KB = {
+            productos: [
+                { nombre:'Hamburguesa Tribu',  precio:'$22.000', cat:'Comidas rápidas', emoji:'🍔' },
+                { nombre:'Salchipapa Especial',precio:'$18.000', cat:'Comidas rápidas', emoji:'🍟' },
+                { nombre:'Limonada Natural',   precio:'$7.000',  cat:'Bebidas',         emoji:'🍋' },
+                { nombre:'Costillas BBQ',      precio:'$32.000', cat:'Parrilla',        emoji:'🥩' },
+            ],
+            horarios:   'Almuerzo: 12:00 – 15:00 · Cena: 18:00 – 22:00',
+            beneficios: ['📦 Historial de pedidos guardado','⚡ Reservas más rápidas','🎁 Acceso a promociones exclusivas','📍 Seguimiento de tus pedidos','✨ Experiencia personalizada'],
+        };
+
+        var QUICK = {
+            inicio:  ['🍔 Ver menú','📅 Reservar mesa','🛒 Hacer pedido','🕐 Horarios','❓ Ayuda'],
+            menu:    ['🍔 Hamburguesas','🥩 Parrilla','🍹 Bebidas','💰 Precios','🔙 Volver'],
+            pedido:  ['🛒 Pedir ahora','📋 Ver menú primero','🔙 Volver'],
+            auth:    ['🔑 Iniciar sesión','📝 Registrarme','🔙 Volver'],
+            ayuda:   ['🍔 Ver menú','📅 Reservar','🛒 Pedir','📞 Contacto','🔙 Volver'],
+        };
+
+        function toggleChat() {
+            chatAbierto = !chatAbierto;
+            var win  = document.getElementById('chat-window');
+            var icon = document.getElementById('chat-fab-icon');
+            win.style.display = chatAbierto ? 'flex' : 'none';
+            if (chatAbierto) win.style.animation = 'chatIn .3s ease';
+            icon.className = chatAbierto ? 'fas fa-times' : 'fas fa-comment-dots';
+            document.getElementById('chat-notif').style.display = 'none';
+            if (chatAbierto && chatHistorial.length === 0) setTimeout(mensajeBienvenida, 300);
         }
+
+        function limpiarChat() {
+            chatHistorial = [];
+            document.getElementById('chat-messages').innerHTML = '';
+            document.getElementById('chat-quick').innerHTML    = '';
+            setTimeout(mensajeBienvenida, 200);
+        }
+
+        function addMsg(texto, tipo, delay) {
+            delay = delay || 0;
+            setTimeout(function() {
+                var box    = document.getElementById('chat-messages');
+                var wrap   = document.createElement('div');
+                wrap.className = 'msg-' + tipo;
+                var bubble = document.createElement('div');
+                bubble.className = 'bubble-' + tipo;
+                bubble.innerHTML = texto;
+                wrap.appendChild(bubble);
+                box.appendChild(wrap);
+                box.scrollTop = box.scrollHeight;
+                chatHistorial.push({ tipo: tipo, texto: texto });
+            }, delay);
+        }
+
+        function mostrarTyping(cb, delay) {
+            delay = delay || 900;
+            var ind = document.getElementById('chat-typing-indicator');
+            var onl = document.getElementById('chat-online');
+            ind.style.display = 'inline'; onl.style.display = 'none';
+            setTimeout(function() { ind.style.display = 'none'; onl.style.display = 'inline'; cb(); }, delay);
+        }
+
+        function setQuick(key) {
+            var c = document.getElementById('chat-quick');
+            c.innerHTML = '';
+            (QUICK[key] || []).forEach(function(label) {
+                var btn = document.createElement('button');
+                btn.className   = 'quick-btn';
+                btn.textContent = label;
+                btn.onclick     = function() { procesarQuick(label); };
+                c.appendChild(btn);
+            });
+        }
+
+        function mensajeBienvenida() {
+            addMsg('👋 ¡Hola! Soy <strong>Tribu Assistant</strong>, tu guía en Restaurante La Tribu.', 'bot', 0);
+            addMsg('Puedo ayudarte con el <strong>menú</strong>, <strong>reservas</strong>, <strong>pedidos</strong> y más. ¿Qué necesitas?', 'bot', 700);
+            setTimeout(function() { setQuick('inicio'); }, 1000);
+        }
+
+        function procesarQuick(label) {
+            addMsg(label, 'user');
+            var t = label.toLowerCase();
+            if (t.includes('menú')||t.includes('menu')||t.includes('hamburguesa')||t.includes('parrilla')||t.includes('bebida')) {
+                mostrarTyping(function(){ respuestaMenu(t); });
+            } else if (t.includes('reservar')||t.includes('mesa')) {
+                mostrarTyping(respuestaReserva);
+            } else if (t.includes('pedir')||t.includes('pedido')) {
+                mostrarTyping(respuestaPedido);
+            } else if (t.includes('horario')||t.includes('🕐')) {
+                mostrarTyping(respuestaHorario);
+            } else if (t.includes('precio')) {
+                mostrarTyping(respuestaPrecios);
+            } else if (t.includes('iniciar sesión')||t.includes('🔑')) {
+                window.location.href = 'views/usuarios/login.php';
+            } else if (t.includes('registrar')||t.includes('📝')) {
+                window.location.href = 'views/usuarios/registre.php';
+            } else if (t.includes('contacto')) {
+                mostrarTyping(respuestaContacto);
+            } else if (t.includes('ayuda')||t.includes('❓')) {
+                mostrarTyping(respuestaAyuda);
+            } else if (t.includes('volver')||t.includes('🔙')) {
+                mostrarTyping(function(){ addMsg('¿En qué más puedo ayudarte? 😊','bot'); setQuick('inicio'); }, 500);
+            } else {
+                mostrarTyping(respuestaDefault);
+            }
+        }
+
+        function respuestaMenu(filtro) {
+            var prods = KB.productos;
+            if (filtro.includes('hamburguesa')||filtro.includes('rápida')) prods = prods.filter(function(p){ return p.cat==='Comidas rápidas'; });
+            else if (filtro.includes('parrilla')||filtro.includes('bbq'))  prods = prods.filter(function(p){ return p.cat==='Parrilla'; });
+            else if (filtro.includes('bebida'))                             prods = prods.filter(function(p){ return p.cat==='Bebidas'; });
+            var html = '🍽️ <strong>Nuestro menú:</strong><br><br>';
+            prods.forEach(function(p){ html += p.emoji+' <strong>'+p.nombre+'</strong> — '+p.precio+'<br>'; });
+            html += '<br>¿Te gustaría hacer un pedido?';
+            addMsg(html, 'bot'); setQuick('pedido');
+        }
+
+        function respuestaReserva() {
+            addMsg('📅 ¡Genial! Para reservar una mesa necesitas tener una cuenta.', 'bot', 0);
+            mostrarTyping(function(){
+                addMsg('Con tu cuenta puedes:<br>'+KB.beneficios.join('<br>'), 'bot');
+                mostrarTyping(function(){ addMsg('¿Ya tienes cuenta o quieres registrarte? 👇','bot'); setQuick('auth'); }, 800);
+            }, 800);
+        }
+
+        function respuestaPedido() {
+            addMsg('🛒 ¡Perfecto! Para realizar un pedido necesitas iniciar sesión.', 'bot', 0);
+            mostrarTyping(function(){
+                addMsg('Al registrarte obtienes:<br>'+KB.beneficios.join('<br>'), 'bot');
+                mostrarTyping(function(){ addMsg('¿Qué prefieres hacer? 👇','bot'); setQuick('auth'); }, 800);
+            }, 800);
+        }
+
+        function respuestaHorario() {
+            addMsg('🕐 <strong>Horarios:</strong><br><br>'+KB.horarios+'<br><br>¡Te esperamos!', 'bot');
+            setQuick('inicio');
+        }
+
+        function respuestaPrecios() {
+            var html = '💰 <strong>Precios:</strong><br><br>';
+            KB.productos.forEach(function(p){ html += p.emoji+' '+p.nombre+': <strong>'+p.precio+'</strong><br>'; });
+            addMsg(html, 'bot'); setQuick('pedido');
+        }
+
+        function respuestaAyuda() {
+            addMsg('❓ <strong>Puedo ayudarte con:</strong><br><br>🍔 Menú y productos<br>📅 Reservas de mesa<br>🛒 Cómo hacer pedidos<br>🕐 Horarios<br>📝 Registro e ingreso', 'bot');
+            setQuick('ayuda');
+        }
+
+        function respuestaContacto() {
+            addMsg('📞 <strong>Contáctanos:</strong><br><br>📍 Restaurante La Tribu · Colombia<br>🕐 '+KB.horarios+'<br><br>¡Estamos para servirte!', 'bot');
+            setQuick('inicio');
+        }
+
+        function respuestaDefault() {
+            var r = ['No entendí bien 😅 ¿Puedo ayudarte con el menú, reservas o pedidos?','¿Quieres ver el menú o hacer una reserva?','Puedo ayudarte con menú, reservas y pedidos. ¿Qué necesitas? 😊'];
+            addMsg(r[Math.floor(Math.random()*r.length)], 'bot'); setQuick('inicio');
+        }
+
+        function enviarMensaje() {
+            var input = document.getElementById('chat-input');
+            var txt   = input.value.trim();
+            if (!txt) return;
+            input.value = '';
+            addMsg(txt, 'user');
+            var l = txt.toLowerCase();
+            mostrarTyping(function() {
+                if (l.match(/hola|buenas|hey|saludos/))           { addMsg('¡Hola! 👋 ¿En qué puedo ayudarte?','bot'); setQuick('inicio'); }
+                else if (l.match(/menu|menú|comida|plato/))        respuestaMenu(l);
+                else if (l.match(/reserva|mesa|reservar/))         respuestaReserva();
+                else if (l.match(/pedido|pedir|orden|comprar/))    respuestaPedido();
+                else if (l.match(/horario|hora|abierto|cierra/))   respuestaHorario();
+                else if (l.match(/precio|costo|cuanto|valor/))     respuestaPrecios();
+                else if (l.match(/gracias|perfecto|genial/))       { addMsg('¡Con gusto! 😊 ¿Algo más?','bot'); setQuick('inicio'); }
+                else if (l.match(/login|ingresar|iniciar|sesion/)) { addMsg('Te llevo al inicio de sesión 🔑','bot'); setTimeout(function(){ window.location.href='views/usuarios/login.php'; },1200); }
+                else if (l.match(/registro|registrar|cuenta/))     { addMsg('¡Vamos a crear tu cuenta! 📝','bot'); setTimeout(function(){ window.location.href='views/usuarios/registre.php'; },1200); }
+                else if (l.match(/hamburguesa|burger/))            respuestaMenu('hamburguesa');
+                else if (l.match(/bbq|costilla|parrilla/))         respuestaMenu('parrilla');
+                else if (l.match(/bebida|limonada|jugo/))          respuestaMenu('bebida');
+                else                                                respuestaDefault();
+            });
+        }
+
+        // Notificación a los 3 segundos
+        setTimeout(function() {
+            if (!chatAbierto) document.getElementById('chat-notif').style.display = 'flex';
+        }, 3000);
     </script>
 
 </body>

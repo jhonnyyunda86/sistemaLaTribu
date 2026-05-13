@@ -1,5 +1,11 @@
 <?php
 session_start();
+// Si ya hay sesión activa, redirigir al dashboard
+if (isset($_SESSION['usuario'])) {
+    $destinos = ['admin'=>'../../views/dashboard/admin_dashboard.php','mesero'=>'../../views/dashboard/mesero_dashboard.php','cliente'=>'../../views/dashboard/cliente_dashboard.php'];
+    $rol = $_SESSION['usuario']['role'] ?? '';
+    if (isset($destinos[$rol])) { header('Location: ' . $destinos[$rol]); exit; }
+}
 $alert = $_SESSION['alert'] ?? null;
 unset($_SESSION['alert']);
 ?>
